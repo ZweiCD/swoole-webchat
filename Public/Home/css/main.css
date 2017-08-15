@@ -1,0 +1,26 @@
+.friend_box{padding: 10px;position: relative;float: right;width: 26%;height: 600px;box-sizing: border-box;border: 1px solid;overflow-y: auto;}
+.friend_box p{cursor: pointer;}
+
+.message_box{padding: 10px;width: 73%;height: 480px;border: 1px solid;position: relative;float: left;box-sizing: border-box;overflow-y: auto;}
+.user{height: 20px;width: 100%;position: relative;border-bottom: 1px solid;text-align: center;}
+.msg{width: 100%;position: relative;margin-top: 10px;}
+.msg .head{width: 100%;position: relative;}
+
+.input_box{width: 73%;height: 150px;border: 1px solid;position: relative;float: left;margin-top: 10px;box-sizing: border-box;}
+.input_box textarea{width: 100%;height: 110px;border: none;box-sizing: border-box;outline: none;padding: 5px;}
+.input_box button{position: relative;float: right;margin-right: 5px;margin-top: 5px;}
+
+.friend_request{position: relative;float: right; width: 26%;height: 40px;box-sizing: border-box;padding: 10px;border: 1px solid;}
+.friend_request .info{position: relative;float: left;height: 20px;line-height: 20px;cursor: pointer;}
+.friend_request .search_btn{position: relative;float: right;height: 20px;line-height: 20px;cursor: pointer;}
+
+.background{display: none;position: absolute;width: 100%;height: 100%;background: #000000;opacity: 0.6;z-index: 9;}
+
+.search_div{display: none;position: absolute;top: 50%;left: 50%;width: 280px;height: 150px;margin-top: -75px;margin-left: -140px;background: whitesmoke;z-index: 10;box-sizing: border-box;padding: 20px;text-align: center;border-radius: 5px;}
+.search_div input{width: 100%;margin-top: 30px;}
+.search_div button{margin-right: 20px;margin-top: 20px;}
+
+.request_div{display: none;position: absolute;top: 50%;left: 50%;width: 480px;height: 300px;margin-top: -150px;margin-left: -240px;background: whitesmoke;z-index: 10;box-sizing: border-box;padding: 10px;text-align: center;border-radius: 5px;}
+.request_content{overflow-y: auto;height: 250px;width: 100%;}
+.request_content div{width: 100%;margin-bottom: 10px;}
+.request_btn {width: 100%;margin-top: 10px;}

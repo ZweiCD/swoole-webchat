@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <meta charset="UTF-8">
+    <link type="text/css" rel="stylesheet" href="__CSS__/main.css?v=<{:time()}>"/>
+    <script src="__STATIC_JS__/jquery-1.11.3.min.js"></script>
+    <script src="__STATIC_PLUGIN__/reconnecting-websocket/reconnecting-websocket.min.js"></script>
+</head>
+<body>
+<!-- 弹框背景 -->
+<div class="background"></div>
+
+<!-- 添加好友弹框 -->
+<div class="search_div">
+    <input type="text" name="search_account" value="" placeholder="请输入账号">
+    <button class="search_send">添加</button><button class="search_cancel">取消</button>
+</div>
+
+<!-- 好友请求弹框 -->
+<div class="request_div">
+    <div class="request_content"></div>
+    <div class="request_btn"><button class="info_close">关闭</button></div>
+</div>
+
+<!-- 好友列表 -->
+<div class="friend_box">
+
+</div>
+
+<!-- 消息框 -->
+<div class="message_box">
+    <div class="user" data-uid="" data-account=""></div>
+    <div class="msg_list"></div>
+</div>
+
+<!-- 输入框 -->
+<div class="input_box">
+    <textarea></textarea>
+    <button id="send_btn">发送</button>
+</div>
+
+<!-- 好友请求 -->
+<div class="friend_request">
+    <span class="info">消息[<span class="info_num">0</span>]</span>
+    <span class="search_btn">查找</span>
+</div>
+</body>
+<script>
+    var account = "<{:V('account')}>";
+    var uid = "<{:V('uid')}>";
+    var nick_name = "<{:V('nick_name')}>";
+    var socket = null;
+    var friend_list = [];
+    var msg_list = [];
+    var last_msg = null;
+    var request_list = [];
+
+    if(account != "" || uid != ""){
+//        socket = new WebSocket("ws://192.168.197.129:9501");
+        socket = new ReconnectingWebSocket("ws://192.168.197.129:9501", null, {debug: false, reconnectInterval: 3000});
+        socket.onopen = function(event){
+            var json_data = {
+                cmd: "socket_connect",
+                account: account,
+                uid: uid
+            };
+            socket.send(JSON.stringify(json_data));
+        };
+
+        socket.onmessage = function(event){
+            console.log(event.data);
+            var data = JSON.parse(event.data);
+
+            /**
+             * socket_connect应答
+             */
+            if(data.cmd == "socket_connect_result"){
+                if(data.code == 0){ //建立连接后
+                    //向服务器获取好友列表
+                    var send_data = {
+                        cmd: "client_friend_list",
+                        account: account
+                    };
+                    socket.send(JSON.stringify(send_data));
+
+                    //向服务器获好友请求列表
+                    send_data = {
+                        cmd: "client_request_list",
+                        account: account
+                    };
+                    socket.send(JSON.stringify(send_data));
+                }else{
+                    alert("建立连接失败");
+                    window.location.href = "<{:U('Login/index')}>";
+                }
+            }
+
+            /**
+             * server_logout
+             * 服务器强制退出命令
+             */
+            if(data.cmd == "server_logout"){
+                alert("该账号在别处登录");
+                socket.close();
+            }
+
+            /**
+             * server_friend_list
+             * 服务器发送好友列表
+             */
+            if(data.cmd == "server_friend_list"){
+                friend_list = data.list;
+                setFriendList();
+            }
+
+            /**
+             * server_request_list
+             * 服务器发送请求消息列表
+             */
+            if(data.cmd == "server_request_list"){
+                request_list = data.list;
+                $(".info_num").text(request_list.length);
+            }
+
+            /**
+             * server_friend_online
+             * 服务器发送好友上线消息
+             */
+            if(data.cmd == "server_friend_online"){
+                for(var i = 0, length = friend_list.length; i < length; i++){
+                    if(friend_list[i]["uid"] == data.uid){
+                        friend_list[i]["status"] = data.status;
+                        break;
+                    }
+                }
+                setFriendList();
+            }
+
+            /**
+             * server_friend_offline
+             * 服务器发送好友下线消息
+             */
+            if(data.cmd == "server_friend_offline"){
+                for(var i = 0, length = friend_list.length; i < length; i++){
+                    if(friend_list[i]["uid"] == data.uid){
+                        friend_list[i]["status"] = data.status;
+                        break;
+                    }
+                }
+                setFriendList();
+            }
+
+            /**
+             * send_msg_result
+             * 服务器返回消息发送结果
+             */
+            if(data.cmd == "send_msg_result"){
+                if(data.code == 0){
+                    addMsg(last_msg);
+                    last_msg = null;
+                }else if(data.code == 1){
+                    alert("消息发送失败，你们还不是好友");
+                }
+            }
+
+            /**
+             * server_send_msg
+             * 服务器转发消息
+             */
+            if(data.cmd == "server_send_msg"){
+                var send_data = {
+                    cmd: "client_get_msg",
+                    account: account,
+                    msg_id: data.msg_id
+                };
+                socket.send(JSON.stringify(send_data));
+
+                if($(".user").attr("data-uid") == data.from){ //如果对话窗口处于活跃状态，则告诉服务器消息已读
+                    send_data = {
+                        cmd: "client_read_msg",
+                        msg_id: data.msg_id
+                    };
+                    socket.send(JSON.stringify(send_data));
+                }
+                addMsg(data);
+            }
+
+            /**
+             * friend_request_result
+             * 服务器返回好友请求结果
+             */
+            if(data.cmd == "friend_request_result"){
+                if(data.code == 0){
+                    alert("好友请求发送成功");
+                }else if(data.code == 1){
+                    alert("添加的账号不存在");
+                }else if(data.code == 2){
+                    alert("你和" + data.search_account + "已是好友关系");
+                }else if(data.code == 3){
+                    alert("请求发送失败");
+                }else{
+                    alert("请求发送失败");
+                }
+            }
+
+            /**
+             * server_friend_request
+             * 服务器转发好友请求
+             */
+            if(data.cmd == "server_friend_request"){
+                for(var i = 0, length = request_list.length; i < length; i++){
+                    if((request_list[i]['request_id'] == data.request_id && request_list[i]['status'] == 1) || request_list[i]['status'] == 2 || request_list[i]['status'] == 3){
+                        request_list.splice(i, 1);
+                        i--;
+                        length--;
+                    }
+                }
+
+                request_list.push(data);
+                $(".info_num").text(request_list.length);
+
+                if($(".request_div").css("display") == "block"){
+                    setRequestList();
+                }
+            }
+
+            /**
+             * server_add_friend
+             * 服务器下发好友列表新增好友命令
+             */
+            if(data.cmd == "server_add_friend"){
+                for(var i = 0, length = friend_list.length; i < length; i++){
+                    if(friend_list[i]['account'] == data.account && friend_list[i]['uid'] == data.uid){
+                        friend_list.splice(i, 1);
+                        i--;
+                        length--;
+                    }
+                }
+
+                friend_list.push(data);
+                setFriendList();
+            }
+        };
+    }
+
+    //点击好友进行对话
+    $(".friend_box").on("click", "p", function(){
+        if($(".user").attr("data-uid") == $(this).attr("data-uid") && $(".user").attr("data-account") == $(this).attr("data-account")){
+            return false;
+        }
+        $(".user").text($(this).attr("data-nick_name"));
+        $(".user").attr("data-uid", $(this).attr("data-uid"));
+        $(".user").attr("data-account", $(this).attr("data-account"));
+        $(".msg_list").html("");
+
+        var msg_ids = [];
+        for(var i = 0, length = friend_list.length; i < length; i++){
+            if(friend_list[i]['account'] == $(this).attr("data-account") && friend_list[i]['uid'] == $(this).attr("data-uid")){
+                for(var j = 0, jlength = friend_list[i]['unreadMsgNum']; j < jlength; j++){
+                    addMsg(friend_list[i]['unreadMsg'][j]);
+                    msg_ids.push(friend_list[i]['unreadMsg'][j]['msg_id']);
+                }
+                if(msg_ids.length > 0) {
+                    friend_list[i]['unreadMsg'] = [];
+                    friend_list[i]['unreadMsgNum'] = 0;
+                    setFriendList();
+                    var send_data = { //告诉服务器消息已读
+                        cmd: "client_read_msg",
+                        msg_id: msg_ids
+                    };
+                    socket.send(JSON.stringify(send_data));
+                }
+                return false;
+            }
+        }
+    });
+
+    //发送按钮
+    $("#send_btn").on("click", function(){
+        var msg = $(".input_box textarea").val().trim();
+        if(msg == "" || msg == null){
+            alert("发送内容不能为空");
+            return false;
+        }
+
+        var from = uid;
+        var to = $(".user").attr("data-uid");
+        if(to == ""){
+            alert("请选择发送的对象");
+            return false;
+        }
+
+        var type = 1;
+        var send_time = getNowFormatDate();
+        var from_account = account;
+        var to_account = $(".user").attr("data-account");
+        var send_data = {
+            cmd: "client_send_msg",
+            from: from,
+            to: to,
+            from_account: from_account,
+            to_account: to_account,
+            type: type,
+            msg: msg,
+            send_time: send_time
+        };
+        msg_list.push(send_data);
+        $(".input_box textarea").val("");
+    });
+
+    /**
+     * 查找按钮
+     */
+    $(".search_btn").on("click", function(){
+        $(".background").show();
+        $(".search_div").show();
+    });
+
+    /**
+     * 查找取消按钮
+     */
+    $(".search_cancel").on("click", function(){
+        $(".background").hide();
+        $(".search_div").hide();
+    });
+
+    /**
+     * 查找添加按钮
+     */
+    $(".search_send").on("click", function(){
+        var search_account = $("input[name=search_account]").val().trim();
+        if(search_account == "" || search_account == null){
+            alert("请输入要添加的账号");
+            return false;
+        }
+
+        if(search_account == account){
+            alert("不能添加自己为好友");
+            return false;
+        }
+
+        for(var i = 0, length = friend_list.length; i < length; i++){
+            if(friend_list[i]['account'] == search_account){
+                alert("你和" + search_account + "已是好友关系");
+                return false;
+            }
+        }
+
+        var send_data = {
+            cmd: "client_friend_request",
+            uid: uid,
+            account: account,
+            search_account: search_account
+        };
+        socket.send(JSON.stringify(send_data));
+    });
+
+    /**
+     * 消息按钮
+     */
+    $(".info").on("click", function(){
+        setRequestList();
+        $(".background").show();
+        $(".request_div").show();
+    });
+
+    /**
+     * 消息弹框关闭按钮
+     */
+    $(".info_close").on("click", function(){
+        $(".background").hide();
+        $(".request_div").hide();
+    });
+
+    /**
+     * 同意按钮
+     */
+    $(".request_content").on("click", ".info_agree", function(){
+        var request_id = $(this).parent().attr("data-request_id");
+        var send_data = {
+            cmd: "client_request_result",
+            request_id: request_id,
+            status: 2
+        };
+
+        socket.send(JSON.stringify(send_data));
+        $(this).parent().hide();
+
+        for(var i = 0, length = request_list.length; i < length; i++){
+            if(request_list[i]['request_id'] == request_id){
+                request_list.splice(i, 1);
+                $(".info_num").text(request_list.length);
+                return false;
+            }
+        }
+    });
+
+    /**
+     * 拒绝按钮
+     */
+    $(".request_content").on("click", ".info_refuse", function(){
+        var request_id = $(this).parent().attr("data-request_id");
+        var send_data = {
+            cmd: "client_request_result",
+            request_id: request_id,
+            status: 3
+        };
+
+        socket.send(JSON.stringify(send_data));
+        $(this).parent().hide();
+
+        for(var i = 0, length = request_list.length; i < length; i++){
+            if(request_list[i]['request_id'] == request_id){
+                request_list.splice(i, 1);
+                $(".info_num").text(request_list.length);
+                return false;
+            }
+        }
+    });
+
+    /**
+     * 设置好友列表
+     */
+    function setFriendList(){
+        var friend_list_html = "";
+        for(var i = 0, length = friend_list.length; i < length; i++){
+            if(friend_list[i]["status"] > 0) {
+                friend_list_html += "<p data-account='" + friend_list[i]["account"] + "' data-uid='" + friend_list[i]["uid"] + "' data-nick_name='" + friend_list[i]["nick_name"] + "'>" + friend_list[i]["nick_name"] + "[" + (friend_list[i]["status"] > 0 ? "在线" : "离线") + "][<span class='unreadMsg'>" + (friend_list[i]['unreadMsgNum'] > 0 ? friend_list[i]['unreadMsgNum'] : 0) + "</span>]</p>"
+            }
+        }
+        for(var i = 0, length = friend_list.length; i < length; i++){
+            if(friend_list[i]["status"] <= 0) {
+                friend_list_html += "<p data-account='" + friend_list[i]["account"] + "' data-uid='" + friend_list[i]["uid"] + "' data-nick_name='" + friend_list[i]["nick_name"] + "'>" + friend_list[i]["nick_name"] + "[" + (friend_list[i]["status"] > 0 ? "在线" : "离线") + "][<span class='unreadMsg'>" + (friend_list[i]['unreadMsgNum'] > 0 ? friend_list[i]['unreadMsgNum'] : 0) + "</span>]</p>"
+            }
+        }
+        $(".friend_box").html(friend_list_html);
+    }
+
+    /**
+     * 设置请求消息列表
+     */
+    function setRequestList(){
+        var request_list_html = "";
+        for(var i = 0, length = request_list.length; i < length; i++){
+            if(request_list[i]['status'] == 1){
+                request_list_html += '<div data-request_id="' + request_list[i]["request_id"] + '" data-account="' + request_list[i]["from_account"] + '" data-uid="' + request_list[i]["from_uid"] + '"><span>' + request_list[i]["from_account"] + '</span>请求添加你为好友&nbsp;<button class="info_agree">同意</button>&nbsp;<button class="info_refuse">拒绝</button></div>'
+            }
+        }
+        $(".request_content").html(request_list_html);
+    }
+
+    /**
+     * 对话框消息列表
+     */
+    function addMsg(data){
+        var msg_html = "";
+        var nick_name_this = "";
+        if(data['from'] == uid){
+            nick_name_this = nick_name;
+        }else if(data['from'] == $(".user").attr("data-uid")){
+            nick_name_this = $(".user").text();
+        }
+        if(nick_name_this != "") {
+            msg_html += '<div class="msg"><div class="head"><span class="nick_name">' + nick_name_this + '</span><span class="time">&nbsp;[' + data['send_time'] + ']</span></div> <div class="content">' + data['msg'] + '</div></div>';
+            $(".msg_list").append(msg_html);
+        }else{
+            for(var i = 0, length = friend_list.length; i < length; i++){
+                if(friend_list[i]['uid'] == data['from']){
+                    friend_list[i]['unreadMsgNum'] = friend_list[i]['unreadMsgNum'] > 0 ? friend_list[i]['unreadMsgNum'] + 1 : 1;
+                    if(friend_list[i]['unreadMsg'] == undefined){
+                        friend_list[i]['unreadMsg'] = [data];
+                    }else{
+                        friend_list[i]['unreadMsg'].push(data);
+                    }
+                    setFriendList();
+                    return false;
+                }
+            }
+        }
+    }
+
+    /**
+     * 获取当前时间
+     */
+    function getNowFormatDate() {
+        var date = new Date();
+        var seperator1 = "-";
+        var seperator2 = ":";
+        var month = date.getMonth() + 1;
+        var strDate = date.getDate();
+        if (month >= 1 && month <= 9) {
+            month = "0" + month;
+        }
+        if (strDate >= 0 && strDate <= 9) {
+            strDate = "0" + strDate;
+        }
+        var currentdate = date.getFullYear() + seperator1 + month + seperator1 + strDate
+                + " " + date.getHours() + seperator2 + date.getMinutes()
+                + seperator2 + date.getSeconds();
+        return currentdate;
+    }
+
+    /**
+     * 消息发送进程
+     */
+    var can_send = true;
+    var sendMsgId = setInterval(function(){
+        if(can_send){
+            can_send = false;
+            if(last_msg == null){
+                for(var i = 0, length = msg_list.length; i < length; i++){
+                    if(last_msg == null){
+                        var send_data = msg_list.shift();
+                        socket.send(JSON.stringify(send_data));
+                        last_msg = send_data;
+                        last_msg['sendTime'] = new Date().getTime();
+                        last_msg['count'] = ( last_msg['count'] === undefined) ? 0 : (last_msg['count'] + 1);
+                    }else{
+                        lastMsgHandle();
+                        break;
+                    }
+                }
+            }else{
+                lastMsgHandle();
+            }
+            can_send = true;
+        }
+    }, 100);
+
+    /**
+     * 处理正在发送的消息
+     */
+    function lastMsgHandle(){
+        if(last_msg['count'] < 4) {
+            if((new Date().getTime() - last_msg['sendTime']) > 300) {
+                msg_list.unshift(last_msg);
+                last_msg = null;
+            }
+        }else{
+            last_msg = null;
+        }
+    }
+</script>
+</html>

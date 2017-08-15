@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>用户登录</title>
+    <script src="__STATIC_JS__/jquery-1.11.3.min.js"></script>
+</head>
+<body>
+<input type="text" maxlength="16" name="account" value="" placeholder="请输入账号"/><br/>
+<input type="password" maxlength="16" name="password" value="" placeholder="请输入密码"/><br/>
+<input type="button" name="login_submit" value="登录"/>
+<input type="button" name="go_register_btn" value="前往注册"/>
+</body>
+<script>
+    $("input[name=login_submit]").on("click", function(){
+        if(!$(this).hasClass("disabled")) {
+            $(this).addClass("disabled");
+            var account = $("input[name=account]").val().trim();
+            var password = $("input[name=password]").val().trim();
+
+            if (account == "") {
+                alert("请输入账号");
+                $(this).removeClass("disabled");
+                return false;
+            }
+
+            if (password == "") {
+                alert("请输入密码");
+                $(this).removeClass("disabled");
+                return false;
+            }
+
+            $.ajax({
+                type: "post",
+                url: "<{:U('Login/login')}>",
+                data: {account: account, password: password},
+                dataType: "json",
+                success: function(data){
+                    $("input[name=login_submit]").removeClass("disabled");
+                    if(data.code == 0){
+                        window.location.href = "<{:U('Index/index')}>&account=" + data.account;
+                    }else if(data.code == 1){
+                        alert("参数错误");
+                    }else if(data.code == 2){
+                        alert("账号或密码错误");
+                    }else{
+                        alert("登录失败");
+                    }
+                }
+            });
+        }
+    });
+</script>
+</html>

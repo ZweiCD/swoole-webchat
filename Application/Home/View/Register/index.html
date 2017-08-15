@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>用户注册</title>
+    <script src="__STATIC_JS__/jquery-1.11.3.min.js"></script>
+</head>
+<body>
+<input type="text" maxlength="16" name="account" value="" placeholder="请输入账号"/><br/>
+<input type="password" maxlength="16" name="password" value="" placeholder="请输入密码"/><br/>
+<input type="password" maxlength="16" name="repassword" value="" placeholder="请输入确认密码"/><br/>
+<input type="button" name="register_submit" value="注册"/>
+<input type="button" name="go_login_btn" value="前往登录"/>
+</body>
+<script>
+    $("input[name=register_submit]").on("click", function(){
+        if(!$(this).hasClass("disabled")) {
+            $(this).addClass("disabled");
+            var account = $("input[name=account]").val().trim();
+            var password = $("input[name=password]").val().trim();
+            var repassword = $("input[name=repassword]").val().trim();
+
+            if (account == "") {
+                alert("请输入账号");
+                $(this).removeClass("disabled");
+                return false;
+            }
+
+            if (password == "") {
+                alert("请输入密码");
+                $(this).removeClass("disabled");
+                return false;
+            }
+
+            if (password != repassword) {
+                alert("两次密码不一致");
+                $(this).removeClass("disabled");
+                return false;
+            }
+
+            $.ajax({
+                type: "post",
+                url: "<{:U('Register/register')}>",
+                data: {account: account, password: password},
+                dataType: "json",
+                success: function (data) {
+                    $("input[name=register_submit]").removeClass("disabled");
+                    if (data.code == 0) {
+                        alert("注册成功");
+                        window.location.href = "<{:U('Login/index')}>";
+                    } else if (data.code == 1) {
+                        alert("参数错误");
+                    } else if (data.code == 2) {
+                        alert("账号已被占用");
+                    } else if (data.code == 3 || data.code == 4) {
+                        alert("注册失败");
+                    } else {
+                        alert("注册失败");
+                    }
+                }
+            });
+        }
+    });
+
+    $("input[name=go_login_btn]").on("click", function(){
+        window.location.href = "<{:U('Login/index')}>";
+    });
+</script>
+</html>
